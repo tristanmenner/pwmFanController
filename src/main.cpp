@@ -2,7 +2,6 @@
 
 // ----- Pin assignment (Arduino Nano ATmega328P) -----
 constexpr uint8_t FAN_PWM_PIN = 9;        // PWM output to fan driver (use a transistor/MOSFET)
-constexpr uint8_t SPEED_SWITCH_PIN = 2;   // LOW = speed control enabled, HIGH = fan off
 constexpr uint8_t SPEED_POT_PIN = A0;     // 10k log pot (5V)
 constexpr uint8_t DUTY_SWITCH_PIN = 3;    // LOW = duty cycle mode enabled, HIGH = always on (100%)
 constexpr uint8_t DUTY_POT_PIN = A1;      // 10k log pot (5V)
@@ -14,16 +13,28 @@ constexpr unsigned long DUTY_MAX_MS = 60000UL;  // 60 seconds
 bool phaseIsOn = true;
 unsigned long phaseStartMs = 0;
 
+void writeFanPwm(uint8_t speedPwm)
+{
+  // Hardware path is inverted: higher Arduino PWM value means lower fan drive.
+  analogWrite(FAN_PWM_PIN, 255 - speedPwm);
+}
+
+void writeFanOff()
+{
+  // Inverted driver requires full-scale output for hard OFF.
+  analogWrite(FAN_PWM_PIN, 255);
+}
+
 int readSpeedPwm()
 {
-  // 0..1023 -> 0..255
+  // Pot direction reversed: low end = full speed, high end = minimum speed.
   const int raw = analogRead(SPEED_POT_PIN);
-  return map(raw, 0, 1023, 0, 255);
+  return map(raw, 0, 1023, 255, 0);
 }
 
 unsigned long readDutyHalfPeriodMs()
 {
-  // Pot low -> 5s on / 5s off, pot high -> 60s on / 60s off.
+  // Pot direction reversed: low end = 60s on/off, high end = 5s on/off.
   const int raw = analogRead(DUTY_POT_PIN);
   return map(raw, 0, 1023, DUTY_MIN_MS, DUTY_MAX_MS);
 }
@@ -31,34 +42,21 @@ unsigned long readDutyHalfPeriodMs()
 void setup()
 {
   pinMode(FAN_PWM_PIN, OUTPUT);
-  pinMode(SPEED_SWITCH_PIN, INPUT_PULLUP);
   pinMode(DUTY_SWITCH_PIN, INPUT_PULLUP);
 
-  analogWrite(FAN_PWM_PIN, 0);
+  writeFanOff();
   phaseStartMs = millis();
 }
 
 void loop()
 {
-  const bool speedEnabled = (digitalRead(SPEED_SWITCH_PIN) == LOW);
   const bool dutyModeEnabled = (digitalRead(DUTY_SWITCH_PIN) == LOW);
-
-  // Switch off for speed control means hard off regardless of other inputs.
-  if (!speedEnabled)
-  {
-    analogWrite(FAN_PWM_PIN, 0);
-    phaseIsOn = true;
-    phaseStartMs = millis();
-    delay(10);
-    return;
-  }
-
   const int pwmValue = readSpeedPwm();
 
   // Switch off for duty control means 100% on (no duty cycling).
   if (!dutyModeEnabled)
   {
-    analogWrite(FAN_PWM_PIN, pwmValue);
+    writeFanPwm(pwmValue);
     phaseIsOn = true;
     phaseStartMs = millis();
     delay(10);
@@ -75,6 +73,14 @@ void loop()
     phaseStartMs = nowMs;
   }
 
-  analogWrite(FAN_PWM_PIN, phaseIsOn ? pwmValue : 0);
+  if (phaseIsOn)
+  {
+    writeFanPwm(pwmValue);
+  }
+  else
+  {
+    writeFanOff();
+  }
+
   delay(10);
 }
