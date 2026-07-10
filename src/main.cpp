@@ -22,21 +22,21 @@ void writeFanPwm(uint8_t speedPwm)
 void writeFanOff()
 {
   // Inverted driver requires full-scale output for hard OFF.
-  analogWrite(FAN_PWM_PIN, 255);
+  analogWrite(FAN_PWM_PIN, 0);
 }
 
 int readSpeedPwm()
 {
   // Pot direction reversed: low end = full speed, high end = minimum speed.
   const int raw = analogRead(SPEED_POT_PIN);
-  return map(raw, 0, 1023, 255, 0);
+  return map(raw, 0, 1023, 0, 255);
 }
 
 unsigned long readDutyHalfPeriodMs()
 {
   // Pot direction reversed: low end = 60s on/off, high end = 5s on/off.
   const int raw = analogRead(DUTY_POT_PIN);
-  return map(raw, 0, 1023, DUTY_MIN_MS, DUTY_MAX_MS);
+  return map(raw, 0, 1023, DUTY_MAX_MS, DUTY_MIN_MS);
 }
 
 void setup()
